@@ -1,5 +1,6 @@
 use std::sync::OnceLock as OnceCell;
 
+use actix_cors::Cors;
 use actix_multipart;
 use actix_multipart::{form::{
     MultipartForm,
@@ -32,6 +33,7 @@ struct WhisperObj {
 struct ModelData {
     trans: Transcriber,
 }
+
 static MODEL: OnceCell<ModelData> = OnceCell::new();
 
 async fn get_params() -> FullParams<'static, 'static> {
@@ -78,12 +80,11 @@ async fn transcribe(
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    whisper_rs::install_whisper_tracing_trampoline();
-    whisper_rs::install_whisper_log_trampoline();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     initial_model().await;
     HttpServer::new(move || {
         App::new()
+            .wrap(Cors::default().allow_any_header().allow_any_method().allow_any_origin())
             .wrap(middleware::Logger::default())
             .app_data(TempFileConfig::default().directory("./tmp"))
             // .app_data(web::Data::new(data))
