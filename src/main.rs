@@ -36,7 +36,7 @@ struct ModelData {
 
 static MODEL: OnceCell<ModelData> = OnceCell::new();
 
-async fn get_params() -> FullParams<'static, 'static> {
+fn get_params() -> FullParams<'static, 'static> {
     let mut _params = FullParams::new(whisper_rs::SamplingStrategy::Greedy { best_of: 1 });
     _params.set_initial_prompt("以下是普通话的句子，这是一段会议记录。");
     _params.set_language(Some("zh"));
@@ -62,16 +62,17 @@ async fn transcribe(
 ) -> Result<impl Responder, actix_web::Error> {
     let mut texts = vec![];
     for f in form.files {
-        let d = MODEL.get().unwrap();
-        let params = get_params().await;
-        let result = d.trans.transcribe_(Box::new(f.file.into_file()), Some(params)).unwrap();
-        let text = result.get_text();
-        let start = result.get_start_timestamp();
-        let end = result.get_end_timestamp();
+        let result = tokio::task::spawn_blocking(move || {
+            let d = MODEL.get().unwrap();
+            let params = get_params();
+            let result = d.trans.transcribe_(Box::new(f.file.into_file()), Some(params)).unwrap();
+            return result;
+        }).await.expect("model transcribe fail");
+
         let r = WhisperObj {
-            start: *start,
-            end: *end,
-            text: text.to_owned(),
+            start: *result.get_start_timestamp(),
+            end: *result.get_end_timestamp(),
+            text: result.get_text().to_owned(),
         };
         texts.push(r);
     }
